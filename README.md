@@ -9,6 +9,7 @@ Given a project file this can:
 - Print all requests/responses from the proxy history
 - Print all requests/responses from the site map
 - Given a regex search the response headers or response bodies from the proxy history and site map
+- Print all Request URLs from proxy history and site map
 - On all of the above, you can have the output show only items in scope
 
 # Blog Posts
@@ -19,7 +20,8 @@ Given a project file this can:
 
 # Installation
 
-1. Compile the code as described in [Build Information](https://github.com/BuffaloWill/burpsuite-project-file-parser#build-information)
+1. Compile the code as described in [Build Information](https://github.com/sparky23172/burpsuite-project-file-parser/tree/Release?tab=readme-ov-file#build-information)
+   - Alternatively, you can download the jar file from the [release](https://github.com/sparky23172/burpsuite-project-file-parser/releases)
 2. Install the extension in Burp
 3. **Make sure to set the Output and Errors to system console**
 
@@ -101,6 +103,21 @@ If you want to clean up the results to something more manageable (rather than th
 ```bash
 java -jar -Djava.awt.headless=true [PATH_TO burpsuite_pro.jar] --project-file=[PATH TO PROJECT FILE] \
   responseBody='.*<form.*'| grep -o -P -- "url\":.{0,100}|.{0,80}<form.{0,80}"
+```
+
+## Dumping all of the URLs in the project file
+
+Use the `urlDump` flag, for example:
+
+```bash
+java -jar -Djava.awt.headless=true [PATH_TO burpsuite_pro.jar] --project-file=[PATH TO PROJECT FILE] urlDump
+```
+
+As a personal recommendation, using the following commands will allow easier usage:
+```bash
+java -jar -Djava.awt.headless=true [PATH_TO burpsuite_pro.jar] --project-file=[PATH TO PROJECT FILE] \
+  urlDump scope > urls.txt
+cat urls.txt | grep url\" | cut -d '"' -f 4 | sort -u 
 ```
 
 # Suggestions
