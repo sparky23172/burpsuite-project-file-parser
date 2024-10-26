@@ -16,11 +16,10 @@ import burp.api.montoya.ui.UserInterface;
 import com.google.gson.*;
 import burp.api.montoya.scope.Scope;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
+
+
 
 public class BurpExtender implements BurpExtension {
     private MontoyaApi api;
@@ -42,19 +41,33 @@ public class BurpExtender implements BurpExtension {
         this.userInterface = api.userInterface();
 
         boolean scope = false;
+        boolean proceed;
+        boolean quiet = true;
 
         api.extension().setName("BurpSuite Project File Parser");
 
         String[] args = api.burpSuite().commandLineArguments().toArray(new String[0]);
-        logging.logToOutput(String.join(" ", args));
+        String output = String.format("{\"Message\":\"Args Detected - %s\"}",String.join(" ", args));
+        logging.logToOutput(output);
 
-        boolean proceed = false;
-
-        if (containsAny(args, "auditItems", "proxyHistory", "siteMap", "responseHeader", "responseBody")) {
+        if (containsAny(args, "auditItems", "proxyHistory", "siteMap", "responseHeader", "responseBody", "urlDump", "loud", "help")) {
             proceed = true;
         } else {
             logging.logToOutput("{\"Message\":\"No flags provided, assuming the initial load of extension. :)\"}");
             return;
+        }
+        if (containsAny(args, "help")){
+            logging.logToOutput("{\"Message\":\"Launching help!\"}");
+            logging.logToOutput("{\"Message\":\"auditItems: Issues/Vulnerability dump\"}");
+            logging.logToOutput("{\"Message\":\"loud: Adds Base64 encoded background and details to auditItems\"}");
+            logging.logToOutput("{\"Message\":\"proxyHistory: ALL requests from proxy history tab\"}");
+            logging.logToOutput("{\"Message\":\"siteMap: Requests from the sitemap\"}");
+            logging.logToOutput("{\"Message\":\"responseHeader: NEEDS TO BE responseHeader=<regex> . Does a regex search of responseHeaders\"}");
+            logging.logToOutput("{\"Message\":\"responseBody: NEEDS TO BE responseBody=<regex> . Does a regex search of responseBodies\"}");
+            logging.logToOutput("{\"Message\":\"urlDump: Dumps only urls from proxyHistory and siteMap\"}");
+            logging.logToOutput("{\"Message\":\"help: Shows this help menu :)\"}");
+            api.extension().unload();
+            api.burpSuite().shutdown();
         }
 
         if (containsAny(args, "scope")){
@@ -62,17 +75,31 @@ public class BurpExtender implements BurpExtension {
             logging.logToOutput("{\"Message\":\"Only logging in-scope items\"}");
         }
 
+        if (containsAny(args, "loud")){
+            quiet = false;
+            logging.logToOutput("{\"Message\":\"Base64 encoded background and details added to auditItems\"}");
+        }
 
         if (contains(args, "proxyHistory")) {
-            printProxyHistory(proxy.history(), args, scope);
+            printProxyHistory(proxy.history(), args, scope, false);
+            logging.logToOutput("{\"Message\":\"proxyHistory Complete\"}");
         }
 
         if (contains(args, "auditItems")) {
-            printAuditItems(scope);
+            printAuditItems(scope, quiet);
+            logging.logToOutput("{\"Message\":\"auditItems Complete\"}");
         }
 
         if (contains(args, "siteMap")) {
-            printHistory(siteMap.requestResponses(), args, scope);
+            printHistory(siteMap.requestResponses(), args, scope, false);
+            logging.logToOutput("{\"Message\":\"siteMap Complete\"}");
+        }
+
+        if (contains(args, "urlDump")) {
+            printProxyHistory(proxy.history(), args, scope, true);
+            logging.logToOutput("{\"Message\":\"urlDump proxyHistory Complete\"}");
+            printHistory(siteMap.requestResponses(), args, scope, true);
+            logging.logToOutput("{\"Message\":\"urlDump siteMap Complete\"}");
         }
 
         boolean responseHeader = false;
@@ -91,6 +118,7 @@ public class BurpExtender implements BurpExtension {
 
         if (responseHeader || responseBody) {
             processResponses(responseHeader, responseBody, regex, scope);
+            logging.logToOutput("{\"Message\":\"response Complete\"}");
         }
 
         if (proceed) {
@@ -100,7 +128,7 @@ public class BurpExtender implements BurpExtension {
         }
     }
 
-    private void printHistory(List<HttpRequestResponse> history, String[] args, boolean scopeTest) {
+    private void printHistory(List<HttpRequestResponse> history, String[] args, boolean scopeTest, boolean urlCheck) {
         for (HttpRequestResponse reqRes : history) {
             try {
                 JsonObject jsonOutput = new JsonObject();
@@ -116,6 +144,12 @@ public class BurpExtender implements BurpExtension {
                 }
 
                 jsonRequest.addProperty("url", request.url());
+
+                if (urlCheck){
+                    logging.logToOutput(jsonRequest.toString());
+                    continue;
+                }
+
                 jsonRequest.add("headers", headersToJsonArray(request.headers()));
                 jsonRequest.addProperty("body", request.bodyToString());
                 jsonOutput.add("request", jsonRequest);
@@ -137,7 +171,7 @@ public class BurpExtender implements BurpExtension {
         }
     }
 
-    private void printProxyHistory(List<ProxyHttpRequestResponse> history, String[] args, boolean scopeTest) {
+    private void printProxyHistory(List<ProxyHttpRequestResponse> history, String[] args, boolean scopeTest, boolean urlCheck) {
         for (ProxyHttpRequestResponse reqRes : history) {
             try {
 
@@ -152,6 +186,12 @@ public class BurpExtender implements BurpExtension {
                 }
                 JsonObject jsonRequest = new JsonObject();
                 jsonRequest.addProperty("url", request.url()+request.query());
+
+                if (urlCheck){
+                    logging.logToOutput(jsonRequest.toString());
+                    continue;
+                }
+
                 jsonRequest.add("headers", headersToJsonArray(request.headers()));
                 jsonRequest.addProperty("body", request.bodyToString());
                 jsonOutput.add("request", jsonRequest);
@@ -188,11 +228,11 @@ public class BurpExtender implements BurpExtension {
         return jsonHeaders;
     }
 
-    private void printAuditItems(boolean scope) {
+    private void printAuditItems(boolean scope, boolean quiet) {
         List<AuditIssue> issues = siteMap.issues();
 
         for (AuditIssue issue : issues) {
-            issueToJson(issue, scope);
+            issueToJson(issue, scope, quiet);
         }
     }
 
@@ -235,8 +275,22 @@ public class BurpExtender implements BurpExtension {
         }
     }
 
-    private void issueToJson(AuditIssue auditIssue, boolean scopeTest) {
+    private void issueToJson(AuditIssue auditIssue, boolean scopeTest, boolean quiet) {
             Map<String, Object> issueMap = new HashMap<>();
+
+            String b64Def;
+            if (auditIssue.definition() != null){
+                b64Def = Base64.getEncoder().encodeToString((auditIssue.definition().toString()).getBytes());
+            } else{
+                b64Def = "None";
+            }
+
+            String b64Det;
+            if (auditIssue.detail() != null){
+                b64Det = Base64.getEncoder().encodeToString((auditIssue.detail()).getBytes());
+            } else{
+                b64Det = "None";
+            }
 
             issueMap.put("name", auditIssue.name());
             issueMap.put("severity", auditIssue.severity().toString());
@@ -245,6 +299,10 @@ public class BurpExtender implements BurpExtension {
             issueMap.put("port", auditIssue.httpService().port());
             issueMap.put("protocol", auditIssue.httpService().secure() ? "https" : "http");
             issueMap.put("url", auditIssue.baseUrl());
+            if (!quiet) {
+                issueMap.put("background", b64Def);
+                issueMap.put("details", b64Det);
+            }
 
             if (scopeTest) {
                 boolean result =  scope.isInScope(auditIssue.baseUrl());
