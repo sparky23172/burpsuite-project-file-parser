@@ -2,7 +2,6 @@ package burp;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.http.Http;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -15,9 +14,8 @@ import burp.api.montoya.scanner.audit.issues.*;
 import burp.api.montoya.sitemap.SiteMap;
 import burp.api.montoya.ui.UserInterface;
 import com.google.gson.*;
+import burp.api.montoya.scope.Scope;
 
-import java.math.BigInteger;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,15 +29,19 @@ public class BurpExtender implements BurpExtension {
     private Scanner scanner;
     private SiteMap siteMap;
     private UserInterface userInterface;
+    private Scope scope;
 
     @Override
     public void initialize(MontoyaApi api) {
         this.api = api;
+        this.scope = api.scope();
         this.logging = api.logging();
         this.proxy = api.proxy();
         this.scanner = api.scanner();
         this.siteMap = api.siteMap();
         this.userInterface = api.userInterface();
+
+        boolean scope = false;
 
         api.extension().setName("BurpSuite Project File Parser");
 
@@ -51,20 +53,26 @@ public class BurpExtender implements BurpExtension {
         if (containsAny(args, "auditItems", "proxyHistory", "siteMap", "responseHeader", "responseBody")) {
             proceed = true;
         } else {
-            logging.logToOutput("{\"Message\":\"No flags provided, assuming the initial load of extension.\"}");
+            logging.logToOutput("{\"Message\":\"No flags provided, assuming the initial load of extension. :)\"}");
             return;
         }
 
+        if (containsAny(args, "scope")){
+            scope = true;
+            logging.logToOutput("{\"Message\":\"Only logging in-scope items\"}");
+        }
+
+
         if (contains(args, "proxyHistory")) {
-            printProxyHistory(proxy.history(), args);
+            printProxyHistory(proxy.history(), args, scope);
         }
 
         if (contains(args, "auditItems")) {
-            printAuditItems();
+            printAuditItems(scope);
         }
 
         if (contains(args, "siteMap")) {
-            printHistory(siteMap.requestResponses(), args);
+            printHistory(siteMap.requestResponses(), args, scope);
         }
 
         boolean responseHeader = false;
@@ -82,23 +90,31 @@ public class BurpExtender implements BurpExtension {
         }
 
         if (responseHeader || responseBody) {
-            processResponses(responseHeader, responseBody, regex);
+            processResponses(responseHeader, responseBody, regex, scope);
         }
 
         if (proceed) {
-            logging.logToOutput("{\"Message\":\"Project File Parsing Complete\"}");
+            logging.logToOutput("{\"Message\":\"Project File Parsing Complete :)\"}");
             api.extension().unload();
             api.burpSuite().shutdown();
         }
     }
 
-    private void printHistory(List<HttpRequestResponse> history, String[] args) {
+    private void printHistory(List<HttpRequestResponse> history, String[] args, boolean scopeTest) {
         for (HttpRequestResponse reqRes : history) {
             try {
                 JsonObject jsonOutput = new JsonObject();
 
                 HttpRequest request = reqRes.request();
                 JsonObject jsonRequest = new JsonObject();
+
+                if (scopeTest) {
+                    boolean result =  scope.isInScope(request.url());
+                    if (!result){
+                        continue;
+                    }
+                }
+
                 jsonRequest.addProperty("url", request.url());
                 jsonRequest.add("headers", headersToJsonArray(request.headers()));
                 jsonRequest.addProperty("body", request.bodyToString());
@@ -121,12 +137,19 @@ public class BurpExtender implements BurpExtension {
         }
     }
 
-    private void printProxyHistory(List<ProxyHttpRequestResponse> history, String[] args) {
+    private void printProxyHistory(List<ProxyHttpRequestResponse> history, String[] args, boolean scopeTest) {
         for (ProxyHttpRequestResponse reqRes : history) {
             try {
+
                 JsonObject jsonOutput = new JsonObject();
 
                 HttpRequest request = reqRes.request();
+                if (scopeTest) {
+                    boolean result =  scope.isInScope(request.url());
+                    if (!result){
+                        continue;
+                    }
+                }
                 JsonObject jsonRequest = new JsonObject();
                 jsonRequest.addProperty("url", request.url()+request.query());
                 jsonRequest.add("headers", headersToJsonArray(request.headers()));
@@ -165,15 +188,15 @@ public class BurpExtender implements BurpExtension {
         return jsonHeaders;
     }
 
-    private void printAuditItems() {
+    private void printAuditItems(boolean scope) {
         List<AuditIssue> issues = siteMap.issues();
 
         for (AuditIssue issue : issues) {
-            issueToJson(issue);
+            issueToJson(issue, scope);
         }
     }
 
-    private void processResponses(boolean responseHeader, boolean responseBody, String regex) {
+    private void processResponses(boolean responseHeader, boolean responseBody, String regex, boolean scopeTest) {
         Pattern pattern = Pattern.compile(regex);
         List<ProxyHttpRequestResponse> allProxyRequests = new ArrayList<>(proxy.history());
 
@@ -182,6 +205,13 @@ public class BurpExtender implements BurpExtension {
                 if (reqRes.response() == null) continue;
 
                 String url = reqRes.request().url();
+                if (scopeTest) {
+                    boolean result =  scope.isInScope(url);
+                    if (!result){
+                        continue;
+                    }
+                }
+
                 List<HttpHeader> responseHeaders = reqRes.response().headers();
                 String responseBodyStr = reqRes.response().bodyToString();
 
@@ -205,21 +235,27 @@ public class BurpExtender implements BurpExtension {
         }
     }
 
-    private void issueToJson(AuditIssue auditIssue) {
-        Map<String, Object> issueMap = new HashMap<>();
+    private void issueToJson(AuditIssue auditIssue, boolean scopeTest) {
+            Map<String, Object> issueMap = new HashMap<>();
 
-        issueMap.put("name", auditIssue.name());
-        issueMap.put("severity", auditIssue.severity().toString());
-        issueMap.put("confidence", auditIssue.confidence().toString());
-        issueMap.put("host", auditIssue.httpService().host());
-        issueMap.put("port", auditIssue.httpService().port());
-        issueMap.put("protocol", auditIssue.httpService().secure() ? "https" : "http");
-        issueMap.put("url", auditIssue.baseUrl());
+            issueMap.put("name", auditIssue.name());
+            issueMap.put("severity", auditIssue.severity().toString());
+            issueMap.put("confidence", auditIssue.confidence().toString());
+            issueMap.put("host", auditIssue.httpService().host());
+            issueMap.put("port", auditIssue.httpService().port());
+            issueMap.put("protocol", auditIssue.httpService().secure() ? "https" : "http");
+            issueMap.put("url", auditIssue.baseUrl());
 
-        Gson gson = new Gson();
+            if (scopeTest) {
+                boolean result =  scope.isInScope(auditIssue.baseUrl());
+                if (!result){
+                    return;
+                }
+            }
+            Gson gson = new Gson();
 
-        String json = gson.toJson(issueMap);
-        logging.logToOutput(json);
+            String json = gson.toJson(issueMap);
+            logging.logToOutput(json);
     }
 
     private boolean contains(String[] args, String flag) {
