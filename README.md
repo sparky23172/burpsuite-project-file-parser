@@ -9,6 +9,7 @@ Given a project file this can:
 - Print all requests/responses from the proxy history
 - Print all requests/responses from the site map
 - Given a regex search the response headers or response bodies from the proxy history and site map
+- On all of the above, you can have the output show only items in scope
 
 # Blog Posts
 
@@ -35,6 +36,7 @@ Notes:
 - `[PATH TO PROJECT FILE]` requires a project file and it's recommended to give the full path to the project file
 - You may need `--add-opens=java.desktop/javax.swing=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED` 
 depending on your version of Java
+- Adding `scope` will do all of the expected features as listed. The only difference is it will run a check against isInScope. If the url is not in scope, it will not be printed.
 
 ## siteMap and proxyHistory
 
@@ -129,4 +131,13 @@ docker run --name burpsuite-project-file-parser -v [ADD THE FULLPATH TO YOUR CWD
 ```
 
 The jar file should now be in the build directory of the project.
+
+## Option 3:
+
+1. Import into [idea](https://www.jetbrains.com/idea/)
+2. Right side. Click on elephant
+3. Project's name
+4. Tasks
+5. build
+6. build
 
