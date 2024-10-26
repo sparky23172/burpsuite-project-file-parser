@@ -141,3 +141,45 @@ The jar file should now be in the build directory of the project.
 5. build
 6. build
 
+# Annoying issue:
+Do you get the below error??
+```
+java -jar -Djava.awt.headless=true ~/BurpSuitePro/burpsuite_pro.jar --project-file=testApp.burp proxyHistory scope 
+
+Picked up _JAVA_OPTIONS: -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true
+Error: LinkageError occurred while loading main class burp.StartBurp
+        java.lang.UnsupportedClassVersionError: burp/StartBurp has been compiled by a more recent version of the Java Runtime (class file version 65.0), this version of the Java Runtime only recognizes class file versions up to 61.0
+```
+
+Change the java file you are using. 
+```
+java --version
+                                                                                                                
+Picked up _JAVA_OPTIONS: -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true
+openjdk 17.0.13 2024-10-15
+OpenJDK Runtime Environment (build 17.0.13+11-Debian-2)
+OpenJDK 64-Bit Server VM (build 17.0.13+11-Debian-2, mixed mode, sharing)
+```
+
+vs
+
+```
+~/Downloads/idea-IC-242.23726.103/jbr/bin/java --version
+
+Picked up _JAVA_OPTIONS: -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true
+openjdk 21.0.4 2024-07-16
+OpenJDK Runtime Environment JBR-21.0.4+13-509.26-jcef (build 21.0.4+13-b509.26)
+OpenJDK 64-Bit Server VM JBR-21.0.4+13-509.26-jcef (build 21.0.4+13-b509.26, mixed mode)
+```
+
+Result:
+```
+~/Downloads/idea-IC-242.23726.103/jbr/bin/java -jar -Djava.awt.headless=true ~/BurpSuitePro/burpsuite_pro.jar --project-file=testApp.burp proxyHistory scope
+
+Picked up _JAVA_OPTIONS: -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true
+Your JRE appears to be version 21.0.4 from JetBrains s.r.o.
+Burp has not been fully tested on this platform and you may experience problems.
+proxyHistory scope
+{"Message":"Only logging in-scope items"}
+...
+```
