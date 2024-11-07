@@ -65,7 +65,8 @@ public class BurpExtender implements BurpExtension {
             logging.logToOutput("{\"Message\":\"responseHeader: NEEDS TO BE responseHeader=<regex> . Does a regex search of responseHeaders\"}");
             logging.logToOutput("{\"Message\":\"responseBody: NEEDS TO BE responseBody=<regex> . Does a regex search of responseBodies\"}");
             logging.logToOutput("{\"Message\":\"urlDump: Dumps only urls from proxyHistory and siteMap\"}");
-            logging.logToOutput("{\"Message\":\"help: Shows this help menu :)\"}");
+            logging.logToOutput("{\"Message\":\"scope: Grabs only in scope items\"}");
+            logging.logToOutput("{\"Message\":\"help: Shows this help menu\"}");
             api.extension().unload();
             api.burpSuite().shutdown();
         }
